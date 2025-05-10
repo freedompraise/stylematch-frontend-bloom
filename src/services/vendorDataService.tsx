@@ -32,6 +32,7 @@ export type VendorDataContextType = {
   getVendorProfile: (userId: string, force?: boolean) => Promise<VendorProfile | null>;
   createVendorProfile: (profile: VendorProfile, imageFile?: File) => Promise<void>;
   updateVendorProfile: (userId: string, updates: Partial<VendorProfile>, imageFile?: File) => Promise<void>;
+  resetVendorData: () => void;
 };
 
 const VendorDataContext = createContext<VendorDataContextType | undefined>(undefined);
@@ -100,16 +101,25 @@ export const VendorDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Vendor profile CRUD
   const getVendorProfile = useCallback(async (userId: string, force = false) => {
-    if (vendorProfileLoaded && vendorProfile && !force) return vendorProfile;
+    console.log("The userID being passed is: ", userId);
+    // Double-check: if we already have a vendorProfile for this user and not forcing, return cached
+    if (!force && vendorProfile && vendorProfile.user_id === userId) {
+      return vendorProfile;
+    }
     const { data, error } = await supabase
       .from('vendors')
       .select('*')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle(); // changed from .single() to .maybeSingle()
     if (error) return null;
-    setVendorProfile(data as VendorProfile);
-    setVendorProfileLoaded(true);
-    return data as VendorProfile;
+    console.log('Fetched vendor profile:', data);
+    // Only set vendor profile if data is a valid object
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      setVendorProfile(data as VendorProfile);
+      setVendorProfileLoaded(true);
+      return data as VendorProfile;
+    }
+    return null;
   }, [vendorProfile, vendorProfileLoaded]);
 
   const createVendorProfile = useCallback(async (profile: VendorProfile, imageFile?: File) => {
@@ -284,6 +294,15 @@ export const VendorDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
   }, [products, orders, productsLoaded, ordersLoaded, fetchProducts, fetchOrders]);
 
+  const resetVendorData = useCallback(() => {
+    setProducts([]);
+    setOrders([]);
+    setProductsLoaded(false);
+    setOrdersLoaded(false);
+    setVendorProfile(null);
+    setVendorProfileLoaded(false);
+  }, []);
+
   return (
     <VendorDataContext.Provider
       value={{
@@ -308,6 +327,7 @@ export const VendorDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         getVendorProfile,
         createVendorProfile,
         updateVendorProfile,
+        resetVendorData,
       }}
     >
       {children}
@@ -319,4 +339,4 @@ export function useVendorData() {
   const ctx = useContext(VendorDataContext);
   if (!ctx) throw new Error('useVendorData must be used within a VendorDataProvider');
   return ctx;
-} 
+}
